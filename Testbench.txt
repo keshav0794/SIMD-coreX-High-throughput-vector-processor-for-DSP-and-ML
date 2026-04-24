@@ -1,0 +1,59 @@
+`timescale 1ns/1ps
+
+module tb_top;
+
+reg clk;
+reg [7:0] instruction;
+wire [127:0] result;
+
+// DUT instance
+top uut (
+    .clk(clk),
+    .instruction(instruction),
+    .result(result)
+);
+
+// Clock generation (10ns period)
+initial begin
+    clk = 0;
+end
+
+always #5 clk = ~clk;
+
+// Waveform dump
+initial begin
+    $dumpfile("waveform.vcd");
+    $dumpvars(0, tb_top);        
+end
+
+// Stimulus
+initial begin
+    instruction = 8'b00000000;
+
+    // Wait for waveform clarity
+    #10;
+
+    // ADD
+    instruction = 8'b00_000_001;
+    #20;
+
+    // SUB
+    instruction = 8'b01_000_001;
+    #20;
+
+    // MUL
+    instruction = 8'b10_000_001;
+    #20;
+
+    #40;
+
+    $finish;
+end
+
+// Console monitoring
+initial begin
+    $monitor("Time=%0t | clk=%b | instr=%b | result=%h",
+              $time, clk, instruction, result);
+end
+
+endmodule
