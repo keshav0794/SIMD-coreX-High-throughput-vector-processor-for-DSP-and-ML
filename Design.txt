@@ -1,0 +1,148 @@
+// ================= SIMD LANE =================
+module simd_lane (
+    input [31:0] a,
+    input [31:0] b,
+    input [1:0] opcode,
+    input clk,
+    output reg [31:0] result
+);
+
+always @(posedge clk) begin
+    case(opcode)
+        2'b00: result <= a + b;
+        2'b01: result <= a - b;
+        2'b10: result <= a * b;
+        default: result <= 32'd0;
+    endcase
+end
+
+endmodule
+
+
+// ================= VECTOR ALU =================
+module vector_alu (
+    input [127:0] vecA,
+    input [127:0] vecB,
+    input [1:0] opcode,
+    input clk,
+    output [127:0] result
+);
+
+wire [127:0] w1;
+
+genvar i;
+
+generate
+    for(i = 0; i < 4; i = i + 1) begin : lanes
+        simd_lane lane (
+            .a(vecA[i*32 +: 32]),
+            .b(vecB[i*32 +: 32]),
+            .opcode(opcode),
+            .clk(clk),
+            .result(w1[i*32 +: 32])
+        );
+    end
+endgenerate
+
+assign result = w1;
+
+endmodule
+
+
+// ================= VECTOR REGISTER FILE =================
+module vector_regfile (
+    input clk,
+    input we,
+    input [2:0] rs1, rs2, rd,
+    input [127:0] write_data,
+    output [127:0] read_data1,
+    output [127:0] read_data2
+);
+
+reg [127:0] regfile [0:7];
+
+integer i;
+
+initial begin
+    for(i = 0; i < 8; i = i + 1)
+        regfile[i] = 128'd0;
+
+    // preload values
+    regfile[0] = {32'd1,32'd2,32'd3,32'd4};
+    regfile[1] = {32'd5,32'd6,32'd7,32'd8};
+end
+
+assign read_data1 = regfile[rs1];
+assign read_data2 = regfile[rs2];
+
+always @(posedge clk) begin
+    if(we)
+        regfile[rd] <= write_data;
+end
+
+endmodule
+
+
+// ================= CONTROL UNIT =================
+module control_unit (
+    input [7:0] instruction,
+    input clk,
+    output reg [1:0] opcode,
+    output reg [2:0] rs1, rs2, rd
+);
+
+always @(posedge clk) begin
+    opcode <= instruction[7:6];
+    rs1    <= instruction[5:3];
+    rs2    <= instruction[2:0];
+    rd     <= 3'b010;
+end
+
+endmodule
+
+
+// ================= TOP MODULE =================
+module top (
+    input clk,
+    input [7:0] instruction,
+    output [127:0] result 
+);
+
+wire [1:0] opcode;
+wire [2:0] rs1, rs2, rd;
+
+wire [127:0] vecA, vecB;
+wire [127:0] alu_result;
+
+control_unit CU (
+    .instruction(instruction),
+    .opcode(opcode),
+    .rs1(rs1),
+    .rs2(rs2),
+    .rd(rd),
+    .clk(clk)
+);
+
+vector_regfile VRF (
+    .clk(clk),
+    .we(1'b1),
+    .rs1(rs1),
+    .rs2(rs2),
+    .rd(rd),
+    .write_data(alu_result),
+    .read_data1(vecA),
+    .read_data2(vecB)
+);
+
+vector_alu VALU (
+    .clk(clk),
+    .vecA(vecA),
+    .vecB(vecB),
+    .opcode(opcode),
+    .result(alu_result)
+);
+
+// final output
+assign result = alu_result;
+
+endmodule
